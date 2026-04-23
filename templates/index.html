@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>미국 대통령 취임사 검색 시스템</title>
+    <meta name="description" content="NLTK Inaugural Address Corpus를 기반으로 Cosine Similarity와 BM25 검색을 지원하는 정보 검색 시스템">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #111827;
+            --bg-card: #1a2035;
+            --bg-card-hover: #1f2847;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-green: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border: #1e293b;
+            --border-accent: #334155;
+            --gradient-1: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            --gradient-2: linear-gradient(135deg, #06b6d4, #3b82f6);
+            --shadow-lg: 0 20px 40px rgba(0,0,0,0.4);
+            --radius: 12px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        /* Background decoration */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 20% 20%, rgba(59,130,246,0.08) 0%, transparent 40%),
+                        radial-gradient(circle at 80% 80%, rgba(139,92,246,0.06) 0%, transparent 40%);
+            z-index: -1;
+            animation: bgShift 20s ease-in-out infinite alternate;
+        }
+
+        @keyframes bgShift {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(-5%, -5%); }
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            padding: 50px 0 30px;
+        }
+
+        header h1 {
+            font-size: 2.2rem;
+            font-weight: 800;
+            background: var(--gradient-1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+
+        header p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        header .badge {
+            display: inline-block;
+            background: rgba(59,130,246,0.15);
+            color: var(--accent-blue);
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            margin-top: 10px;
+            border: 1px solid rgba(59,130,246,0.2);
+        }
+
+        /* Search Section */
+        .search-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .search-row {
+            display: flex;
+            gap: 12px;
+            align-items: stretch;
+        }
+
+        .search-input-wrap {
+            flex: 1;
+            position: relative;
+        }
+
+        .search-input-wrap svg {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            width: 20px;
+            height: 20px;
+        }
+
+        #searchInput {
+            width: 100%;
+            padding: 14px 18px 14px 46px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-accent);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        #searchInput:focus {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+        }
+
+        #searchInput::placeholder {
+            color: var(--text-muted);
+        }
+
+        #searchBtn {
+            padding: 14px 28px;
+            background: var(--gradient-1);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.2s;
+            white-space: nowrap;
+            font-family: inherit;
+        }
+
+        #searchBtn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(59,130,246,0.3);
+        }
+
+        #searchBtn:active {
+            transform: translateY(0);
+        }
+
+        /* Method selector */
+        .method-row {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+            align-items: center;
+        }
+
+        .method-row label {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .method-options {
+            display: flex;
+            gap: 6px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 3px;
+            border: 1px solid var(--border);
+        }
+
+        .method-options input[type="radio"] { display: none; }
+
+        .method-options label {
+            padding: 8px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            transition: all 0.2s;
+        }
+
+        .method-options input:checked + label {
+            background: var(--gradient-1);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(59,130,246,0.3);
+        }
+
+        .method-params {
+            margin-left: auto;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        .method-params span {
+            background: rgba(139,92,246,0.15);
+            color: var(--accent-purple);
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-weight: 500;
+            margin-left: 4px;
+        }
+
+        /* Loading */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .loading.active { display: block; }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 12px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* IDF Panel */
+        .info-panels {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 768px) {
+            .info-panels { grid-template-columns: 1fr; }
+            .search-row { flex-direction: column; }
+            header h1 { font-size: 1.6rem; }
+        }
+
+        .panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 18px;
+            background: rgba(59,130,246,0.05);
+            border-bottom: 1px solid var(--border);
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--accent-cyan);
+        }
+
+        .panel-header.purple { color: var(--accent-purple); background: rgba(139,92,246,0.05); }
+
+        .panel-body {
+            padding: 14px 18px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        /* scrollbar */
+        .panel-body::-webkit-scrollbar { width: 5px; }
+        .panel-body::-webkit-scrollbar-track { background: transparent; }
+        .panel-body::-webkit-scrollbar-thumb { background: var(--border-accent); border-radius: 4px; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+        }
+
+        th {
+            text-align: left;
+            padding: 8px 10px;
+            color: var(--text-muted);
+            font-weight: 600;
+            border-bottom: 1px solid var(--border);
+            text-transform: uppercase;
+            font-size: 0.72rem;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 7px 10px;
+            color: var(--text-secondary);
+            border-bottom: 1px solid rgba(30,41,59,0.5);
+        }
+
+        tr:hover td {
+            background: rgba(59,130,246,0.03);
+        }
+
+        .val-highlight {
+            color: var(--accent-blue);
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .val-green { color: var(--accent-green); }
+        .val-amber { color: var(--accent-amber); }
+
+        .term-tag {
+            display: inline-block;
+            background: rgba(6,182,212,0.1);
+            color: var(--accent-cyan);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.78rem;
+            font-weight: 500;
+        }
+
+        /* Results */
+        .results-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .results-header h2 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .results-count {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .result-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px 24px;
+            margin-bottom: 12px;
+            transition: border-color 0.2s, transform 0.15s;
+            position: relative;
+        }
+
+        .result-card:hover {
+            border-color: var(--accent-blue);
+            transform: translateY(-1px);
+        }
+
+        .result-rank {
+            position: absolute;
+            top: 16px;
+            right: 20px;
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: rgba(59,130,246,0.15);
+        }
+
+        .result-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .result-president {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .result-year {
+            background: rgba(139,92,246,0.15);
+            color: var(--accent-purple);
+            padding: 2px 10px;
+            border-radius: 4px;
+            font-size: 0.78rem;
+            font-weight: 600;
+        }
+
+        .result-score {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        .result-score strong {
+            color: var(--accent-green);
+        }
+
+        .result-sentence {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.7;
+            margin: 10px 0;
+            padding: 12px 16px;
+            background: rgba(6,182,212,0.04);
+            border-left: 3px solid var(--accent-cyan);
+            border-radius: 0 6px 6px 0;
+        }
+
+        .result-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--accent-blue);
+            text-decoration: none;
+            font-size: 0.82rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .result-link:hover {
+            color: var(--accent-cyan);
+        }
+
+        .result-extra {
+            display: flex;
+            gap: 16px;
+            margin-top: 8px;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        /* TF detail table */
+        .tf-section { margin-top: 24px; }
+
+        .tf-doc-group {
+            margin-bottom: 12px;
+        }
+
+        .tf-doc-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            background: rgba(139,92,246,0.05);
+            border-radius: 8px 8px 0 0;
+            border: 1px solid var(--border);
+            border-bottom: none;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .tf-doc-header .name {
+            color: var(--text-primary);
+        }
+
+        .tf-table-wrap {
+            border: 1px solid var(--border);
+            border-radius: 0 0 8px 8px;
+            overflow: hidden;
+        }
+
+        /* No results */
+        .no-results {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+
+        .no-results svg {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 16px;
+            opacity: 0.4;
+        }
+
+        /* Stats bar */
+        .stats-bar {
+            display: flex;
+            gap: 20px;
+            padding: 12px 18px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 24px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .stats-bar .stat-val {
+            color: var(--accent-blue);
+            font-weight: 600;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 40px 0;
+            color: var(--text-muted);
+            font-size: 0.78rem;
+        }
+
+        /* Animations */
+        .fade-in {
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Hidden */
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1 id="main-title">🇺🇸 미국 대통령 취임사 검색 시스템</h1>
+            <p>NLTK Inaugural Address Corpus 기반 정보 검색</p>
+            <div class="badge">60 Documents · George Washington ~ Donald Trump (2nd Term)</div>
+        </header>
+
+        <!-- Search -->
+        <section class="search-section" id="search-section">
+            <div class="search-row">
+                <div class="search-input-wrap">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                    <input type="text" id="searchInput" placeholder="검색어를 입력하세요 (예: freedom democracy, war peace ...)" autocomplete="off">
+                </div>
+                <button id="searchBtn">검색</button>
+            </div>
+            <div class="method-row">
+                <label>랭킹 방법:</label>
+                <div class="method-options">
+                    <input type="radio" name="method" id="cosine" value="cosine" checked>
+                    <label for="cosine">Cosine Similarity</label>
+                    <input type="radio" name="method" id="bm25" value="bm25">
+                    <label for="bm25">BM25</label>
+                </div>
+                <div class="method-params" id="bm25Params">
+                    BM25 파라미터: <span>k1 = 1.2</span> <span>b = 0.9</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Loading -->
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">검색 중...</p>
+        </div>
+
+        <!-- Results Container -->
+        <div id="resultsContainer" class="hidden">
+            <!-- Stats Bar -->
+            <div class="stats-bar" id="statsBar"></div>
+
+            <!-- IDF & TF Panels -->
+            <div class="info-panels" id="infoPanels">
+                <!-- IDF Panel -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                        질의어 IDF 정보
+                    </div>
+                    <div class="panel-body" id="idfPanel"></div>
+                </div>
+                <!-- TF Panel (Top Results) -->
+                <div class="panel">
+                    <div class="panel-header purple">
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                        문서별 TF 정보
+                    </div>
+                    <div class="panel-body" id="tfPanel"></div>
+                </div>
+            </div>
+
+            <!-- Search Results -->
+            <div id="searchResults"></div>
+        </div>
+
+        <footer>
+            미국 대통령 취임사 검색 시스템 &middot; NLTK Inaugural Address Corpus &middot; Cosine Similarity & BM25
+        </footer>
+    </div>
+
+    <script>
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const loading = document.getElementById('loading');
+        const resultsContainer = document.getElementById('resultsContainer');
+
+        // Enter key로 검색
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') doSearch();
+        });
+        searchBtn.addEventListener('click', doSearch);
+
+        async function doSearch() {
+            const query = searchInput.value.trim();
+            if (!query) return;
+
+            const method = document.querySelector('input[name="method"]:checked').value;
+
+            // UI 상태
+            loading.classList.add('active');
+            resultsContainer.classList.add('hidden');
+
+            try {
+                const res = await fetch('/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query, method }),
+                });
+                const data = await res.json();
+                renderResults(data);
+            } catch (err) {
+                console.error(err);
+                alert('검색 중 오류가 발생했습니다.');
+            } finally {
+                loading.classList.remove('active');
+            }
+        }
+
+        function renderResults(data) {
+            resultsContainer.classList.remove('hidden');
+            resultsContainer.classList.add('fade-in');
+
+            // Stats bar
+            const statsBar = document.getElementById('statsBar');
+            const methodLabel = data.method === 'bm25' ? 'BM25 (k1=1.2, b=0.9)' : 'Cosine Similarity';
+            statsBar.innerHTML = `
+                <div>검색어: <span class="stat-val">"${escHtml(data.query)}"</span></div>
+                <div>랭킹: <span class="stat-val">${methodLabel}</span></div>
+                <div>결과: <span class="stat-val">${data.results.length}건</span></div>
+                <div>총 문서: <span class="stat-val">${data.total_docs}개</span></div>
+                <div>평균 문서 길이: <span class="stat-val">${data.avg_dl}</span></div>
+            `;
+
+            // IDF Panel
+            const idfPanel = document.getElementById('idfPanel');
+            if (data.idf_info && data.idf_info.length > 0) {
+                let html = `<table>
+                    <thead><tr><th>원본 term</th><th>Stemmed</th><th>DF</th><th>IDF</th></tr></thead><tbody>`;
+                // 중복 제거
+                const seen = new Set();
+                for (const item of data.idf_info) {
+                    const key = item.stemmed_term;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    html += `<tr>
+                        <td><span class="term-tag">${escHtml(item.raw_term)}</span></td>
+                        <td>${escHtml(item.stemmed_term)}</td>
+                        <td class="val-highlight">${item.df}</td>
+                        <td class="val-green">${item.idf.toFixed(4)}</td>
+                    </tr>`;
+                }
+                html += `</tbody></table>`;
+                idfPanel.innerHTML = html;
+            }
+
+            // TF Panel
+            const tfPanel = document.getElementById('tfPanel');
+            if (data.tf_info && data.tf_info.length > 0) {
+                let html = '';
+                for (const doc of data.tf_info.slice(0, 10)) {
+                    html += `<div class="tf-doc-group">
+                        <div class="tf-doc-header">
+                            <span class="name">${escHtml(doc.president)}</span>
+                            <span style="color: var(--accent-purple);">(${doc.year})</span>
+                        </div>
+                        <div class="tf-table-wrap"><table>
+                            <thead><tr><th>Term</th><th>Stemmed</th><th>TF</th></tr></thead><tbody>`;
+                    // 중복 제거
+                    const seen = new Set();
+                    for (const t of doc.terms) {
+                        const key = t.stemmed_term;
+                        if (seen.has(key)) continue;
+                        seen.add(key);
+                        html += `<tr>
+                            <td><span class="term-tag">${escHtml(t.raw_term)}</span></td>
+                            <td>${escHtml(t.stemmed_term)}</td>
+                            <td class="${t.tf > 0 ? 'val-amber' : ''}">${t.tf}</td>
+                        </tr>`;
+                    }
+                    html += `</tbody></table></div></div>`;
+                }
+                tfPanel.innerHTML = html;
+            }
+
+            // Search Results
+            const searchResults = document.getElementById('searchResults');
+            if (data.results.length === 0) {
+                searchResults.innerHTML = `
+                    <div class="no-results">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <p>검색 결과가 없습니다.</p>
+                    </div>`;
+                return;
+            }
+
+            let html = `
+                <div class="results-header">
+                    <h2>검색 결과</h2>
+                    <span class="results-count">상위 ${data.results.length}건</span>
+                </div>`;
+
+            data.results.forEach((r, i) => {
+                html += `
+                <div class="result-card fade-in" style="animation-delay: ${i * 0.04}s">
+                    <div class="result-rank">#${i + 1}</div>
+                    <div class="result-meta">
+                        <span class="result-president">${escHtml(r.president)}</span>
+                        <span class="result-year">${r.year}</span>
+                        <span class="result-score">Score: <strong>${r.score.toFixed(6)}</strong></span>
+                    </div>
+                    <div class="result-sentence">"${escHtml(r.key_sentence)}"</div>
+                    <div style="display:flex; align-items:center; justify-content:space-between;">
+                        <a class="result-link" href="${r.url}" target="_blank" rel="noopener">
+                            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                            취임사 원문 보기
+                        </a>
+                        <div class="result-extra">
+                            <span>문서 ID: ${r.doc_id}</span>
+                            <span>파일: ${escHtml(r.filename)}</span>
+                            <span>문서 길이: ${r.doc_length} tokens</span>
+                        </div>
+                    </div>
+                </div>`;
+            });
+
+            searchResults.innerHTML = html;
+        }
+
+        function escHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
